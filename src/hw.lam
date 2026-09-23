@@ -65,11 +65,11 @@ task 1.1 (предскажите результат)
 -- сверяясь с интерпретатором. Пользуйтесь законами (Y, fold, either), а не
 -- раскрытием определений.
 
-expect Y (K 5) = ...
-expect fold (cons 1 (cons 2 (cons 3 nil))) mult 1 = ...
-expect fold (cons 1 (cons 2 (cons 3 nil))) (\x r. x) 0 = ...
-expect fold (cons 2 (cons 3 nil)) (\x r. cons (mult x x) r) nil = ...
-expect either suc pred (inr 3) = ...
+expect Y (K 5) = 5
+expect fold (cons 1 (cons 2 (cons 3 nil))) mult 1 = 6
+expect fold (cons 1 (cons 2 (cons 3 nil))) (\x r. x) 0 = 1
+expect fold (cons 2 (cons 3 nil)) (\x r. cons (mult x x) r) nil = cons 4 (cons 9 nil)
+expect either suc pred (inr 3) = 2
 
 
 task 1.2 (числа Фибоначчи без рекурсии)
@@ -77,7 +77,8 @@ task 1.2 (числа Фибоначчи без рекурсии)
 -- Это цикл с фиксированным числом итераций, как факториал из разминки на практике:
 -- natElim и состояние в паре.
 
-fib := ...
+-- После k шагов состояние равно (F_k, F_{k+1}).
+fib := \n. fst (natElim n (\p. pair (snd p) (plus (fst p) (snd p))) (pair 0 1))
 check fib: normalizing, avoids Y
 expect fib 0 = 0
 expect fib 1 = 1
@@ -89,7 +90,7 @@ expect fib 7 = 13
 task 1.3 (рекурсивная функция: обратный отсчёт)
 -- Задайте через Y терм range n, строящий список [n, n-1, ..., 1]; range 0 = [].
 
-range := ...
+range := Y (\rec n. if (isZero n) nil (cons n (rec (pred n))))
 check range: uses Y
 expect range 0 = nil
 expect range 1 = cons 1 nil
@@ -100,17 +101,17 @@ task 1.4 (простые функции над списками)
 -- Задайте без Y: sum (сумма элементов), length (длина) и map f xs (список из
 -- результатов применения f к каждому элементу).
 
-sum := ...
+sum := \xs. fold xs plus 0
 check sum: normalizing, avoids Y
 expect sum (cons 1 (cons 2 (cons 3 nil))) = 6
 expect sum nil = 0
 
-length := ...
+length := \xs. fold xs (\x r. suc r) 0
 check length: normalizing, avoids Y
 expect length (cons 1 (cons 2 nil)) = 2
 expect length nil = 0
 
-map := ...
+map := \f xs. fold xs (\x r. cons (f x) r) nil
 check map: normalizing, avoids Y
 expect map suc (cons 1 (cons 2 nil)) = cons 2 (cons 3 nil)
 expect map isZero (cons 0 (cons 5 nil)) = cons true (cons false nil)
@@ -126,19 +127,19 @@ task 2.1 (арифметика без рекурсии)
 -- minus n m = k, если plus m k = n, иначе 0; lt n m = true при n < m;
 -- equal n m = true при n = m.
 
-minus := ...
+minus := \n m. natElim m pred n
 check minus: normalizing, avoids Y
 expect minus 5 2 = 3
 expect minus 2 5 = 0
 expect minus 4 4 = 0
 
-lt := ...
+lt := \n m. not (isZero (minus m n))
 check lt: normalizing, avoids Y
 expect lt 2 5 = true
 expect lt 5 2 = false
 expect lt 3 3 = false
 
-equal := ...
+equal := \n m. and (isZero (minus n m)) (isZero (minus m n))
 check equal: normalizing, avoids Y
 expect equal 3 3 = true
 expect equal 3 4 = false
@@ -150,13 +151,13 @@ task 2.2 (рекурсивные функции: остаток и НОД)
 -- наибольший общий делитель по алгоритму Евклида (gcd a 0 = a).
 -- Пригодятся minus и lt из задачи 2.1.
 
-mod := ...
+mod := Y (\rec n m. if (lt n m) n (rec (minus n m) m))
 check mod: uses Y
 expect mod 7 3 = 1
 expect mod 6 3 = 0
 expect mod 2 5 = 2
 
-gcd := ...
+gcd := Y (\rec a b. if (isZero b) a (rec b (mod a b)))
 check gcd: uses Y
 expect gcd 6 4 = 2
 expect gcd 7 3 = 1
@@ -168,7 +169,9 @@ task 2.3 (последний элемент)
 -- Подсказка: пусть результат свёртки — вариант: inl — «правее элементов нет»,
 -- inr x — «последний элемент уже известен, это x». В конце разберите его через either.
 
-last := ...
+-- Вариант отличает пустой суффикс от уже найденного последнего элемента.
+-- Для пустого списка выбираем 0, условие этот случай не ограничивает.
+last := \xs. either (K 0) I (fold xs (\x r. either (K (inr x)) inr r) (inl 0))
 check last: normalizing, avoids Y
 expect last (cons 1 (cons 2 (cons 3 nil))) = 3
 expect last (cons 7 nil) = 7
@@ -177,12 +180,12 @@ expect last (cons 7 nil) = 7
 task 2.4 (пустота и склейка)
 -- Задайте без Y: isEmpty xs (true на пустом списке) и concat xs ys (склейка списков).
 
-isEmpty := ...
+isEmpty := \xs. fold xs (\x r. false) true
 check isEmpty: normalizing, avoids Y
 expect isEmpty nil = true
 expect isEmpty (cons 0 nil) = false
 
-concat := ...
+concat := \xs ys. fold xs cons ys
 check concat: normalizing, avoids Y
 expect concat (cons 1 (cons 2 nil)) (cons 3 nil) = cons 1 (cons 2 (cons 3 nil))
 expect concat nil (cons 3 nil) = cons 3 nil
@@ -195,12 +198,12 @@ task 2.5 (поиск, который может не найти)
 -- если такого нет, inl 0. findOr d p xs возвращает найденный элемент или d
 -- (разберите результат find с помощью either).
 
-find := ...
+find := \p xs. fold xs (\x r. if (p x) (inr x) r) (inl 0)
 expect find isEven (cons 1 (cons 4 (cons 6 nil))) = inr 4
 expect find isEven (cons 1 (cons 3 nil)) = inl 0
 expect find isEven nil = inl 0
 
-findOr := ...
+findOr := \d p xs. either (K d) I (find p xs)
 expect findOr 7 isEven (cons 1 (cons 4 nil)) = 4
 expect findOr 7 isEven (cons 1 (cons 3 nil)) = 7
 
@@ -214,7 +217,7 @@ num := \n. inl n
 add := \a b. inr (inl (pair a b))
 mul := \a b. inr (inr (pair a b))
 
-eval := ...
+eval := Y (\rec e. either I (either (\p. plus (rec (fst p)) (rec (snd p))) (\p. mult (rec (fst p)) (rec (snd p)))) e)
 expect eval (num 3) = 3
 expect eval (add (num 1) (num 2)) = 3
 expect eval (mul (add (num 1) (num 2)) (num 4)) = 12
@@ -230,21 +233,36 @@ task 2.7 (две стратегии)
 
 chain t2_7_normal (strategy normal) =
   (\x. x x) (K I (I I))
-  ~b~> ...
+  ~b~> (K I (I I)) (K I (I I))
+  ~b~> ((\y. I) (I I)) (K I (I I))
+  ~b~> I (K I (I I))
+  ~b~> K I (I I)
+  ~b~> (\y. I) (I I)
+  ~b~> I
 
 chain t2_7_applicative (strategy applicative) =
   (\x. x x) (K I (I I))
-  ~b~> ...
+  ~b~> (\x. x x) ((\y. I) (I I))
+  ~b~> (\x. x x) ((\y. I) I)
+  ~b~> (\x. x x) I
+  ~b~> I I
+  ~b~> I
+
+-- Нормальная стратегия не вычисляет отбрасываемое I I, но дважды сокращает K I (I I).
+-- Аппликативная стратегия вычисляет аргумент до копирования, но зря сокращает I I.
+-- Здесь получается 6 шагов нормальной стратегии и 5 шагов аппликативной.
 
 
 task 2.8 (примеры нормальных форм)
 -- Приведите примеры замкнутых термов (объяснение выбора — комментарием здесь же):
 -- (а) в WHNF, но не в HNF; (б) в HNF, но не в NF.
 
-t2_8a := ...
+-- Внешняя лямбда даёт WHNF, но в голове её тела находится редекс I x.
+t2_8a := \x. I x
 check t2_8a: closed, whnf, not hnf
 
-t2_8b := ...
+-- Голова тела - связанная переменная x, но в её аргументе есть редекс I x.
+t2_8b := \x. x (I x)
 check t2_8b: closed, hnf, not nf
 
 
@@ -255,7 +273,8 @@ check t2_8b: closed, hnf, not nf
 task 3.1 (хвост списка)
 -- Задайте без Y терм tail: tail [] = [], tail [5, 10, 13] = [10, 13].
 
-tail := ...
+-- Состояние хранит весь обработанный суффикс и его хвост.
+tail := \xs. snd (fold xs (\x p. pair (cons x (fst p)) (fst p)) (pair nil nil))
 check tail: normalizing, avoids Y
 expect tail nil = nil
 expect tail (cons 5 (cons 10 (cons 13 nil))) = cons 10 (cons 13 nil)
@@ -265,7 +284,8 @@ expect tail (cons 1 nil) = nil
 task 3.2 (разворот списка)
 -- Задайте без Y терм reverse: reverse [1, 3, 6, 7] = [7, 6, 3, 1].
 
-reverse := ...
+-- Результат свёртки - функция, которая ставит развёрнутый список перед аккумулятором.
+reverse := \xs. fold xs (\x k acc. k (cons x acc)) I nil
 check reverse: normalizing, avoids Y
 expect reverse (cons 1 (cons 3 (cons 6 (cons 7 nil)))) = cons 7 (cons 6 (cons 3 (cons 1 nil)))
 expect reverse nil = nil
@@ -285,6 +305,20 @@ expect reverse nil = nil
 -- зацикливания. В статически типизированном языке задача интереснее: какой тип у fix?
 -- Самопроверка: factorial(5) = 120, и в теле factorial нет обращения к имени factorial.
 
+-- Решение на Python с аннотацией типа fix и самопроверкой: src/fix.py.
+-- Рекурсивный вызов отложен до получения аргумента, ветку выбирает условное выражение.
+
 -- (б) Доказательство. Пусть дан терм M. Покажите, как подобрать такой терм N в
 -- нормальной форме, что N I =β M. (Для математиков: докажите, что для каждого M
 -- существует N в нормальной форме такой, что N I =β M.)
+
+-- Выберем h, не встречающуюся в M даже среди связанных переменных.
+-- Построим T_h структурной рекурсией по синтаксису M:
+-- T_h(x) = x
+-- T_h(\x. P) = \x. T_h(P)
+-- T_h(P Q) = h T_h(P) T_h(Q)
+-- Возьмём N = \h. T_h(M). В каждой аппликации голова - переменная,
+-- а подтермы нормальны по индукции. Поэтому N находится в нормальной форме.
+-- После подстановки I вместо h каждое I T_I(P) T_I(Q) сокращается
+-- до T_I(P) T_I(Q). По структурной индукции T_I(M) сокращается до M.
+-- Следовательно, N I =beta M. Нормализуемость самого M не требуется.
